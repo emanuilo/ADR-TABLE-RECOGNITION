@@ -1,0 +1,14 @@
+# OSX
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Basics
+__pycache__
+env
+venv
+# Pycharm
+.idea
+out
+darkflow
+ckpt
