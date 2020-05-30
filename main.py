@@ -21,10 +21,10 @@ args = vars(ap.parse_args())
 OUT_DIR = 'out/'
 
 
-class ImagePreprocess:
+class ImagePreprocessor:
 
     @staticmethod
-    def adaptive_preproc(img):
+    def adaptive_preprocessing(img):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 99, 11)
         return img
@@ -123,7 +123,7 @@ class NumberDetector:
     def get_numbers(self, images):
         numbers = []
         for cropped_image in images:
-            preproc_image = ImagePreprocess.adaptive_preproc(cropped_image)
+            preproc_image = ImagePreprocessor.adaptive_preprocessing(cropped_image)
             number_result = pytesseract.image_to_string(preproc_image, config=self.tesseract_conf)
             numbers.append(number_result)
         return numbers
@@ -175,7 +175,7 @@ class NumberToSubstanceConv:
 if __name__ == '__main__':
     if args['excel']:
         converter = NumberToSubstanceConv()
-        NumberToSubstanceConv.convert_xls_to_json('Opasnosti_i_materije.xlsx')
+        NumberToSubstanceConv.convert_xls_to_json('substances_files/Opasnosti_i_materije.xlsx')
     else:
         thresh = args['threshold']
         adr_table_detector = AdrTableDetector(args['threshold'])
