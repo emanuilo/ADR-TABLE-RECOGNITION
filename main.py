@@ -34,9 +34,7 @@ class ImageUtil:
 
     @staticmethod
     def crop_number_image(img, predictions, expand=True):
-        predictions.sort(key=lambda x: x.get('confidence'), reverse=True)
         cropped_images = []
-
         for prediction in predictions:
             xtop = prediction.get('topleft').get('x')
             ytop = prediction.get('topleft').get('y')
@@ -109,21 +107,54 @@ class NumberDetector:
                    "labels": "labels/number_label.txt"}
         self.tfnet = TFNet(options)
         self.tfnet.load_from_ckpt()
+        self.tesseract_conf = '--oem 1 --psm 10 outputbase digits'
 
     def detect_numbers(self, img, file_name):
         results = self.tfnet.return_predict(img)
-        cropped_images = ImageUtil.crop_number_image(img, results)
+        first_row_results, second_row_results = self.split_rows(results)
+        first_row_images = ImageUtil.crop_number_image(img, first_row_results)
+        second_row_images = ImageUtil.crop_number_image(img, second_row_results)
+
+        first_row_numbers = self.get_numbers(first_row_images)
+        print(f'First row: {first_row_numbers}')
+        second_row_numbers = self.get_numbers(second_row_images)
+        print(f'Second row: {second_row_numbers}')
+
+    def get_numbers(self, images):
         numbers = []
-
-        for cropped_image in cropped_images:
+        for cropped_image in images:
             preproc_image = ImagePreprocess.adaptive_preproc(cropped_image)
-
-            conf = '--oem 1 --psm 10 outputbase digits'
-            number_result = pytesseract.image_to_string(preproc_image, config=conf)
+            number_result = pytesseract.image_to_string(preproc_image, config=self.tesseract_conf)
             numbers.append(number_result)
+        return numbers
 
-            with open(f'{OUT_DIR}/{file_name}.txt', "a") as text_file:
-                text_file.write(number_result)
+    def split_rows(self, predictions):
+        predictions.sort(key=lambda x: x.get('topleft').get('y'), reverse=False)
+        numbers_in_first_row = self.count_first_row_numbers(predictions)
+
+        first_row_predictions = predictions[:numbers_in_first_row]
+        first_row_predictions.sort(key=lambda x: x.get('topleft').get('x'), reverse=False)
+
+        second_row_predictions = predictions[numbers_in_first_row:]
+        second_row_predictions.sort(key=lambda x: x.get('topleft').get('x'), reverse=False)
+
+        return first_row_predictions, second_row_predictions
+
+    def count_first_row_numbers(self, predictions):
+        try:
+            first_y = predictions[0].get('topleft').get('y')
+            second_y = predictions[1].get('topleft').get('y')
+            ref_difference = second_y - first_y
+
+            MAGIC_NUMBER = 3
+            for i in range(1, len(predictions)):
+                temp_y2 = predictions[i + 1].get('topleft').get('y')
+                temp_y1 = predictions[i].get('topleft').get('y')
+                if temp_y2 - temp_y1 > ref_difference * MAGIC_NUMBER:
+                    return i + 1
+        except IndexError:
+            print('Not enough data.')
+            return 0
 
 
 class NumberToSubstanceConv:
