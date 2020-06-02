@@ -159,6 +159,13 @@ class NumberDetector:
 
 class NumberToSubstanceConv:
 
+    def __init__(self, substances_file_path, dangers_file_path):
+        with open(substances_file_path, "r") as json_file:
+            self.substances_dict = json.load(json_file)
+
+        with open(dangers_file_path, "r") as json_file:
+            self.dangers_dict = json.load(json_file)
+
     @staticmethod
     def convert_xls_to_json(excel_file_path):
         xls = ExcelFile(excel_file_path)
@@ -171,11 +178,20 @@ class NumberToSubstanceConv:
         with open(f'{xls.sheet_names[1]}.json', "w") as json_file:
             json.dump(df.set_index('un_broj')['naziv'].to_dict(), json_file)
 
+    def get_substance_name(self, substance_id):
+        substance_name = self.substances_dict[substance_id]
+        print(substance_name)
+        return substance_name
+
+    def get_danger_name(self, danger_id):
+        danger_name = self.dangers_dict[danger_id]
+        print(danger_name)
+        return danger_name
+
 
 if __name__ == '__main__':
     if args['excel']:
-        converter = NumberToSubstanceConv()
-        NumberToSubstanceConv.convert_xls_to_json('substances_files/Opasnosti_i_materije.xlsx')
+        converter = NumberToSubstanceConv('substances_files/Materija.json', 'substances_files/IdentifikacijaOpasnosti.json')
     else:
         thresh = args['threshold']
         adr_table_detector = AdrTableDetector(args['threshold'])
