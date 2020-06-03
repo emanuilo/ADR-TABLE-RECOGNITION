@@ -1,4 +1,5 @@
 import os
+import re
 import cv2
 import json
 import argparse
@@ -10,10 +11,14 @@ from pandas import *
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--image", type=str,
                 help="path to input image")
-ap.add_argument("-e", "--excel", type=str,
-                help="Excel")
+ap.add_argument("-e", "--convert-xls-to-json", type=str,
+                help="Convert excel file to json")
 ap.add_argument("-id", "--image-dir", type=str,
                 help="path to input directory")
+ap.add_argument("-gtd", "--ground-truth-dir", type=str,
+                help="path to ground truth directory")
+ap.add_argument("-d", "--demo", action="store_true",
+                help="Run demo")
 ap.add_argument("-t", "--threshold", type=float, default=0.2,
                 help="minimum confidence for predicted bounding boxes")
 args = vars(ap.parse_args())
@@ -24,7 +29,7 @@ OUT_DIR = 'out/'
 class ImagePreprocessor:
 
     @staticmethod
-    def adaptive_preprocessing(img):
+    def adaptive_preproc(img):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 99, 11)
         return img
@@ -116,17 +121,18 @@ class NumberDetector:
         second_row_images = ImageUtil.crop_number_image(img, second_row_results)
 
         first_row_numbers = self.get_numbers(first_row_images)
-        print(f'First row: {first_row_numbers}')
+        # print(f'First row: {first_row_numbers}')
         second_row_numbers = self.get_numbers(second_row_images)
-        print(f'Second row: {second_row_numbers}')
+        # print(f'Second row: {second_row_numbers}')
+        return first_row_numbers, second_row_numbers
 
     def get_numbers(self, images):
         numbers = []
         for cropped_image in images:
-            preproc_image = ImagePreprocessor.adaptive_preprocessing(cropped_image)
+            preproc_image = ImagePreprocessor.adaptive_preproc(cropped_image)
             number_result = pytesseract.image_to_string(preproc_image, config=self.tesseract_conf)
             numbers.append(number_result)
-        return numbers
+        return ''.join(map(str, numbers))
 
     def split_rows(self, predictions):
         predictions.sort(key=lambda x: x.get('topleft').get('y'), reverse=False)
@@ -179,19 +185,61 @@ class NumberToSubstanceConv:
             json.dump(df.set_index('un_broj')['naziv'].to_dict(), json_file)
 
     def get_substance_name(self, substance_id):
-        substance_name = self.substances_dict[substance_id]
-        print(substance_name)
-        return substance_name
+        try:
+            substance_name = self.substances_dict[substance_id]
+            return substance_name
+        except KeyError:
+            print("Key Error!")
+            return ''
 
     def get_danger_name(self, danger_id):
-        danger_name = self.dangers_dict[danger_id]
-        print(danger_name)
-        return danger_name
+        try:
+            danger_name = self.dangers_dict[danger_id]
+            return danger_name
+        except KeyError:
+            print("Key Error!")
+            return ''
 
 
 if __name__ == '__main__':
-    if args['excel']:
+    if args['convert_xls_to_json']:
         converter = NumberToSubstanceConv('substances_files/Materija.json', 'substances_files/IdentifikacijaOpasnosti.json')
+    elif args['demo']:
+        thresh = args['threshold']
+        adr_table_detector = AdrTableDetector(args['threshold'])
+        number_detector = NumberDetector(args['threshold'])
+
+        ground_truth_dir = args['ground_truth_dir']
+        image_dir = args['image_dir']
+        correct_cnt = 0
+        total_cnt = 0
+
+        for image_path in os.listdir(image_dir):
+            print(f'------------{image_path}------------')
+            if image_path.endswith('.jpg'):
+                base_name = os.path.splitext(image_path)[0]
+                img = cv2.imread(os.path.join(image_dir, image_path))
+                adr_table = adr_table_detector.detect_adr_table(img)
+                # adr_table = cv2.medianBlur(adr_table, 1)
+                first_row, second_row = number_detector.detect_numbers(
+                    adr_table,
+                    ImageUtil.no_extension_file_name(image_path)
+                )
+                first_row = re.sub('[^0-9]', '', first_row)
+                second_row = re.sub('[^0-9]', '', second_row)
+                # print(converter.get_danger_name(first_row))
+                # print(converter.get_substance_name(second_row))
+                with open(f'{ground_truth_dir}/{base_name}.json') as f:
+                    ground_truth = json.load(f)
+
+                if first_row == ground_truth['first_row'] and second_row == ground_truth['second_row']:
+                    correct_cnt += 1
+                total_cnt += 1
+
+        accuracy = correct_cnt / total_cnt
+        print(f'Correct: {correct_cnt}')
+        print(f'Total: {total_cnt}')
+        print(f'Accuracy: {accuracy}%')
     else:
         thresh = args['threshold']
         adr_table_detector = AdrTableDetector(args['threshold'])

@@ -10,5 +10,4 @@ venv
 # Pycharm
 .idea
 out
-darkflow
 ckpt
