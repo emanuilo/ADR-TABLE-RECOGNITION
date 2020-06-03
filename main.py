@@ -5,7 +5,6 @@ import json
 import argparse
 import pytesseract
 from darkflow.net.build import TFNet
-from pandas import *
 
 
 ap = argparse.ArgumentParser()
@@ -17,8 +16,6 @@ ap.add_argument("-id", "--image-dir", type=str,
                 help="path to input directory")
 ap.add_argument("-gtd", "--ground-truth-dir", type=str,
                 help="path to ground truth directory")
-ap.add_argument("-d", "--demo", action="store_true",
-                help="Run demo")
 ap.add_argument("-t", "--threshold", type=float, default=0.2,
                 help="minimum confidence for predicted bounding boxes")
 args = vars(ap.parse_args())
@@ -172,18 +169,6 @@ class NumberToSubstanceConv:
         with open(dangers_file_path, "r") as json_file:
             self.dangers_dict = json.load(json_file)
 
-    @staticmethod
-    def convert_xls_to_json(excel_file_path):
-        xls = ExcelFile(excel_file_path)
-
-        df = xls.parse(xls.sheet_names[0])
-        with open(f'{xls.sheet_names[0]}.json', "w") as json_file:
-            json.dump(df.set_index('id')['opis'].to_dict(), json_file)
-
-        df = xls.parse(xls.sheet_names[1])
-        with open(f'{xls.sheet_names[1]}.json', "w") as json_file:
-            json.dump(df.set_index('un_broj')['naziv'].to_dict(), json_file)
-
     def get_substance_name(self, substance_id):
         try:
             substance_name = self.substances_dict[substance_id]
@@ -202,56 +187,40 @@ class NumberToSubstanceConv:
 
 
 if __name__ == '__main__':
-    if args['convert_xls_to_json']:
-        converter = NumberToSubstanceConv('substances_files/Materija.json', 'substances_files/IdentifikacijaOpasnosti.json')
-    elif args['demo']:
-        thresh = args['threshold']
-        adr_table_detector = AdrTableDetector(args['threshold'])
-        number_detector = NumberDetector(args['threshold'])
 
-        ground_truth_dir = args['ground_truth_dir']
-        image_dir = args['image_dir']
-        correct_cnt = 0
-        total_cnt = 0
+    thresh = args['threshold']
+    adr_table_detector = AdrTableDetector(thresh)
+    number_detector = NumberDetector(thresh)
+    converter = NumberToSubstanceConv('substances_files/Materija.json', 'substances_files/IdentifikacijaOpasnosti.json')
 
-        for image_path in os.listdir(image_dir):
-            print(f'------------{image_path}------------')
-            if image_path.endswith('.jpg'):
-                base_name = os.path.splitext(image_path)[0]
-                img = cv2.imread(os.path.join(image_dir, image_path))
-                adr_table = adr_table_detector.detect_adr_table(img)
-                # adr_table = cv2.medianBlur(adr_table, 1)
-                first_row, second_row = number_detector.detect_numbers(
-                    adr_table,
-                    ImageUtil.no_extension_file_name(image_path)
-                )
-                first_row = re.sub('[^0-9]', '', first_row)
-                second_row = re.sub('[^0-9]', '', second_row)
-                # print(converter.get_danger_name(first_row))
-                # print(converter.get_substance_name(second_row))
-                with open(f'{ground_truth_dir}/{base_name}.json') as f:
-                    ground_truth = json.load(f)
+    ground_truth_dir = args['ground_truth_dir']
+    image_dir = args['image_dir']
+    correct_cnt = 0
+    total_cnt = 0
 
-                if first_row == ground_truth['first_row'] and second_row == ground_truth['second_row']:
-                    correct_cnt += 1
-                total_cnt += 1
-
-        accuracy = correct_cnt / total_cnt
-        print(f'Correct: {correct_cnt}')
-        print(f'Total: {total_cnt}')
-        print(f'Accuracy: {accuracy}%')
-    else:
-        thresh = args['threshold']
-        adr_table_detector = AdrTableDetector(args['threshold'])
-        number_detector = NumberDetector(args['threshold'])
-
-        if args['image_dir']:
-            for image_path in os.listdir(args['image_dir']):
-                img = cv2.imread(os.path.join(args['image_dir'], image_path))
-                adr_table = adr_table_detector.detect_adr_table(img)
-                number_detector.detect_numbers(adr_table, ImageUtil.no_extension_file_name(image_path))
-
-        elif args['image']:
-            img = cv2.imread(args['image'])
+    for image_path in os.listdir(image_dir):
+        print(f'------------{image_path}------------')
+        if image_path.endswith('.jpg'):
+            base_name = os.path.splitext(image_path)[0]
+            img = cv2.imread(os.path.join(image_dir, image_path))
             adr_table = adr_table_detector.detect_adr_table(img)
-            number_detector.detect_numbers(adr_table, ImageUtil.no_extension_file_name(args['image']))
+            # adr_table = cv2.medianBlur(adr_table, 1)
+            first_row, second_row = number_detector.detect_numbers(
+                adr_table,
+                ImageUtil.no_extension_file_name(image_path)
+            )
+            first_row = re.sub('[^0-9]', '', first_row)
+            second_row = re.sub('[^0-9]', '', second_row)
+            # print(converter.get_danger_name(first_row))
+            # print(converter.get_substance_name(second_row))
+            with open(f'{ground_truth_dir}/{base_name}.json') as f:
+                ground_truth = json.load(f)
+
+            if first_row == ground_truth['first_row'] and second_row == ground_truth['second_row']:
+                correct_cnt += 1
+            total_cnt += 1
+
+    accuracy = correct_cnt / total_cnt
+    print(f'Correct: {correct_cnt}')
+    print(f'Total: {total_cnt}')
+    print(f'Accuracy: {accuracy}%')
