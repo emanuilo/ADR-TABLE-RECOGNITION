@@ -223,4 +223,4 @@ if __name__ == '__main__':
     accuracy = correct_cnt / total_cnt
     print(f'Correct: {correct_cnt}')
     print(f'Total: {total_cnt}')
-    print(f'Accuracy: {accuracy}%')
+    print(f'Accuracy: {format(round(accuracy, 3) * 100, ".1f")}%')
