@@ -5,7 +5,8 @@ import json
 import argparse
 import pytesseract
 from darkflow.net.build import TFNet
-
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import Paragraph, Image
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--image", type=str,
@@ -89,11 +90,12 @@ class ImageUtil:
 
 class AdrTableDetector:
 
-    def __init__(self, threshold):
+    def __init__(self, threshold, report_generator):
         options = {"model": "cfg/yolov2-large-ann.cfg", "load": 1000, "threshold": threshold,
                    "labels": "labels/adr_table_label.txt"}
         self.tfnet = TFNet(options)
         self.tfnet.load_from_ckpt()
+        self.report_generator = report_generator
 
     def detect_adr_table(self, img):
         results = self.tfnet.return_predict(img)
@@ -113,17 +115,18 @@ class NumberDetector:
 
     def detect_numbers(self, img, file_name):
         results = self.tfnet.return_predict(img)
-        first_row_results, second_row_results = self.split_rows(results)
+        first_row_results, second_row_results = self.__split_rows(results)
         first_row_images = ImageUtil.crop_number_image(img, first_row_results)
         second_row_images = ImageUtil.crop_number_image(img, second_row_results)
 
-        first_row_numbers = self.get_numbers(first_row_images)
-        # print(f'First row: {first_row_numbers}')
-        second_row_numbers = self.get_numbers(second_row_images)
-        # print(f'Second row: {second_row_numbers}')
+        return first_row_images, second_row_images
+
+    def get_rows(self, first_row_images, second_row_images):
+        first_row_numbers = self.__get_numbers(first_row_images)
+        second_row_numbers = self.__get_numbers(second_row_images)
         return first_row_numbers, second_row_numbers
 
-    def get_numbers(self, images):
+    def __get_numbers(self, images):
         numbers = []
         for cropped_image in images:
             preproc_image = ImagePreprocessor.adaptive_preproc(cropped_image)
@@ -131,9 +134,9 @@ class NumberDetector:
             numbers.append(number_result)
         return ''.join(map(str, numbers))
 
-    def split_rows(self, predictions):
+    def __split_rows(self, predictions):
         predictions.sort(key=lambda x: x.get('topleft').get('y'), reverse=False)
-        numbers_in_first_row = self.count_first_row_numbers(predictions)
+        numbers_in_first_row = self.__count_first_row_numbers(predictions)
 
         first_row_predictions = predictions[:numbers_in_first_row]
         first_row_predictions.sort(key=lambda x: x.get('topleft').get('x'), reverse=False)
@@ -143,7 +146,7 @@ class NumberDetector:
 
         return first_row_predictions, second_row_predictions
 
-    def count_first_row_numbers(self, predictions):
+    def __count_first_row_numbers(self, predictions):
         try:
             first_y = predictions[0].get('topleft').get('y')
             second_y = predictions[1].get('topleft').get('y')
@@ -186,6 +189,35 @@ class NumberToSubstanceConv:
             return ''
 
 
+class ReportGenerator:
+
+    def __init__(self):
+        self.story = []
+        self.styles = getSampleStyleSheet()
+        # alignment - TA_LEFT, TA_CENTER, TA_CENTRE, TA_RIGHT, TA_JUSTIFY => 0, 1, 2, 3, 4
+        self.normal_style = ParagraphStyle(
+            'normal', alignment=0, parent=self.styles['Normal'], spaceAfter=20
+        )
+        self.heading1_style = ParagraphStyle(
+            'heading1', alignment=0, parent=self.styles['Heading1']
+        )
+        self.thumbnails_folder = ''
+        # in case we don't want to save tiles
+        self.temp_tiles_list = []
+        self.test_summary = {}
+
+    def add_heading(self, text):
+        self.story.append(Paragraph(text, self.heading1_style))
+
+    def add_image(self, img):
+        pass
+        # cv2.imwrite('')
+        # Image(thumbnail_path, width=45, height=31), result['image_name']
+
+    def generate_report(self):
+        pass
+
+
 if __name__ == '__main__':
 
     thresh = args['threshold']
@@ -200,10 +232,12 @@ if __name__ == '__main__':
 
     for image_path in os.listdir(image_dir):
         print(f'------------{image_path}------------')
+        # add heading Image name
         if image_path.endswith('.jpg'):
             base_name = os.path.splitext(image_path)[0]
             img = cv2.imread(os.path.join(image_dir, image_path))
             adr_table = adr_table_detector.detect_adr_table(img)
+            # add cropped image
             # adr_table = cv2.medianBlur(adr_table, 1)
             first_row, second_row = number_detector.detect_numbers(
                 adr_table,
