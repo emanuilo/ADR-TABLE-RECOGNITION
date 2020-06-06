@@ -20,3 +20,4 @@
   pip install -e .
 ```
 4. Download model weights from [here](https://drive.google.com/drive/folders/1mW735di8mXFFkIBTRy-O051beePIm6FK?usp=sharing)
+Put weights in ckpt directory
