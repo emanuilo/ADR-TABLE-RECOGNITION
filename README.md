@@ -1,11 +1,12 @@
 # ADR Table Recognition
 
-## Getting started
+## Installation
 
 1.
 ```
   git clone https://github.com/emanuilo/ADR-TABLE-RECOGNITION.git
   git submodule init
+  pip install -r requirements.txt
   cd darkflow
   python3 setup.py build_ext --inplace
 ```
