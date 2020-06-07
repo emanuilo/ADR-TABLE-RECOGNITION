@@ -14,9 +14,9 @@ ap.add_argument("-i", "--image", type=str,
                 help="path to input image")
 ap.add_argument("-e", "--convert-xls-to-json", type=str,
                 help="Convert excel file to json")
-ap.add_argument("-id", "--image-dir", type=str,
+ap.add_argument("-id", "--image-dir", type=str, default='test_images',
                 help="path to input directory")
-ap.add_argument("-gtd", "--ground-truth-dir", type=str,
+ap.add_argument("-gtd", "--ground-truth-dir", type=str, default='test_images/ground_truth',
                 help="path to ground truth directory")
 ap.add_argument("-t", "--threshold", type=float, default=0.2,
                 help="minimum confidence for predicted bounding boxes")
