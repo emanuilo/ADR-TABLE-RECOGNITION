@@ -5,8 +5,9 @@ import json
 import argparse
 import pytesseract
 from darkflow.net.build import TFNet
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import Paragraph, Image
+from reportlab.platypus import Paragraph, Image, SimpleDocTemplate, Table
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--image", type=str,
@@ -22,6 +23,7 @@ ap.add_argument("-t", "--threshold", type=float, default=0.2,
 args = vars(ap.parse_args())
 
 OUT_DIR = 'out/'
+TEMP_IMAGE_DIR = os.path.join(OUT_DIR, 'temp')
 
 
 class ImagePreprocessor:
@@ -90,12 +92,11 @@ class ImageUtil:
 
 class AdrTableDetector:
 
-    def __init__(self, threshold, report_generator):
+    def __init__(self, threshold):
         options = {"model": "cfg/yolov2-large-ann.cfg", "load": 1000, "threshold": threshold,
                    "labels": "labels/adr_table_label.txt"}
         self.tfnet = TFNet(options)
         self.tfnet.load_from_ckpt()
-        self.report_generator = report_generator
 
     def detect_adr_table(self, img):
         results = self.tfnet.return_predict(img)
@@ -124,6 +125,10 @@ class NumberDetector:
     def get_rows(self, first_row_images, second_row_images):
         first_row_numbers = self.__get_numbers(first_row_images)
         second_row_numbers = self.__get_numbers(second_row_images)
+
+        first_row_numbers = re.sub('[^0-9]', '', first_row_numbers)
+        second_row_numbers = re.sub('[^0-9]', '', second_row_numbers)
+
         return first_row_numbers, second_row_numbers
 
     def __get_numbers(self, images):
@@ -196,65 +201,100 @@ class ReportGenerator:
         self.styles = getSampleStyleSheet()
         # alignment - TA_LEFT, TA_CENTER, TA_CENTRE, TA_RIGHT, TA_JUSTIFY => 0, 1, 2, 3, 4
         self.normal_style = ParagraphStyle(
-            'normal', alignment=0, parent=self.styles['Normal'], spaceAfter=20
-        )
+            'normal', alignment=0, parent=self.styles['Normal'])
         self.heading1_style = ParagraphStyle(
-            'heading1', alignment=0, parent=self.styles['Heading1']
-        )
-        self.thumbnails_folder = ''
-        # in case we don't want to save tiles
-        self.temp_tiles_list = []
-        self.test_summary = {}
+            'heading1', alignment=0, parent=self.styles['Heading1'], spaceBefore=20)
+        if not os.path.exists(TEMP_IMAGE_DIR):
+            os.makedirs(TEMP_IMAGE_DIR)
+        self.temp_img_cnt = 0
 
     def add_heading(self, text):
         self.story.append(Paragraph(text, self.heading1_style))
 
-    def add_image(self, img):
-        pass
-        # cv2.imwrite('')
-        # Image(thumbnail_path, width=45, height=31), result['image_name']
+    def add_text(self, text):
+        self.story.append(Paragraph(text, self.normal_style))
 
-    def generate_report(self):
-        pass
+    def add_image(self, img, height=150):
+        resized_img = self.__resize_image(img, height)
+        temp_img_name = self.__get_temp_img_name()
+        cv2.imwrite(temp_img_name, resized_img)
+        self.story.append(Image(temp_img_name, hAlign='LEFT'))
+
+    def add_number_images(self, images, height=70):
+        table_row = []
+
+        for img in images:
+            preproc_img = ImagePreprocessor.adaptive_preproc(img)
+            resized_img = self.__resize_image(preproc_img, height)
+            temp_img_name = self.__get_temp_img_name()
+            cv2.imwrite(temp_img_name, resized_img)
+            table_row.append(Image(temp_img_name, hAlign='LEFT'))
+
+        if len(table_row) > 0:
+            self.story.append(Table([table_row], hAlign='LEFT'))
+
+    def generate_report(self, output_filename):
+        doc = SimpleDocTemplate(output_filename + '.pdf', pagesize=letter)
+        doc.build(self.story)
+
+        for temp_img in os.listdir(TEMP_IMAGE_DIR):
+            os.remove(os.path.join(TEMP_IMAGE_DIR, temp_img))
+        os.removedirs(TEMP_IMAGE_DIR)
+
+    def __resize_image(self, img, height):
+        orig_h, orig_w = img.shape[:2]
+        width = int((height / orig_h) * orig_w)      # get width with the same aspect ratio
+        return cv2.resize(img, (width, height))
+
+    def __get_temp_img_name(self):
+        temp_img_name = os.path.join(TEMP_IMAGE_DIR, f'tmp_img{self.temp_img_cnt}.jpg')
+        self.temp_img_cnt += 1
+        return temp_img_name
 
 
 if __name__ == '__main__':
 
-    thresh = args['threshold']
-    adr_table_detector = AdrTableDetector(thresh)
-    number_detector = NumberDetector(thresh)
+    adr_table_detector = AdrTableDetector(args['threshold'])
+    number_detector = NumberDetector(args['threshold'])
     converter = NumberToSubstanceConv('substances_files/Materija.json', 'substances_files/IdentifikacijaOpasnosti.json')
+    report_generator = ReportGenerator()
 
-    ground_truth_dir = args['ground_truth_dir']
-    image_dir = args['image_dir']
     correct_cnt = 0
     total_cnt = 0
 
-    for image_path in os.listdir(image_dir):
-        print(f'------------{image_path}------------')
-        # add heading Image name
-        if image_path.endswith('.jpg'):
-            base_name = os.path.splitext(image_path)[0]
-            img = cv2.imread(os.path.join(image_dir, image_path))
-            adr_table = adr_table_detector.detect_adr_table(img)
-            # add cropped image
-            # adr_table = cv2.medianBlur(adr_table, 1)
-            first_row, second_row = number_detector.detect_numbers(
-                adr_table,
-                ImageUtil.no_extension_file_name(image_path)
-            )
-            first_row = re.sub('[^0-9]', '', first_row)
-            second_row = re.sub('[^0-9]', '', second_row)
-            # print(converter.get_danger_name(first_row))
-            # print(converter.get_substance_name(second_row))
-            with open(f'{ground_truth_dir}/{base_name}.json') as f:
-                ground_truth = json.load(f)
+    for image_path in os.listdir(args['image_dir']):
 
+        if image_path.endswith('.jpg'):
+            report_generator.add_heading(image_path)
+
+            base_name = os.path.splitext(image_path)[0]
+            img = cv2.imread(os.path.join(args['image_dir'], image_path))
+
+            adr_table = adr_table_detector.detect_adr_table(img)
+            report_generator.add_image(adr_table)
+            adr_table = cv2.medianBlur(adr_table, 1)    # todo delete or move
+
+            first_row_images, second_row_images = number_detector.detect_numbers(
+                adr_table,
+                ImageUtil.no_extension_file_name(image_path))
+            report_generator.add_number_images(first_row_images + second_row_images)
+
+            first_row, second_row = number_detector.get_rows(first_row_images, second_row_images)
+            report_generator.add_text(f'First row: {first_row}')
+            report_generator.add_text(f'Second row: {second_row}')
+
+            report_generator.add_text(f'Danger: {converter.get_danger_name(first_row)}')
+            report_generator.add_text(f'Substance: {converter.get_substance_name(second_row)}')
+
+            with open(f'{args["ground_truth_dir"]}/{base_name}.json') as f:
+                ground_truth = json.load(f)
             if first_row == ground_truth['first_row'] and second_row == ground_truth['second_row']:
                 correct_cnt += 1
             total_cnt += 1
 
     accuracy = correct_cnt / total_cnt
-    print(f'Correct: {correct_cnt}')
-    print(f'Total: {total_cnt}')
-    print(f'Accuracy: {format(round(accuracy, 3) * 100, ".1f")}%')
+    report_generator.add_heading('Test results: ')
+    report_generator.add_text(f'Correct: {correct_cnt}')
+    report_generator.add_text(f'Total: {total_cnt}')
+    report_generator.add_text(f'Accuracy: {format(round(accuracy, 3) * 100, ".1f")}%')
+    report_generator.generate_report('TestReport')
