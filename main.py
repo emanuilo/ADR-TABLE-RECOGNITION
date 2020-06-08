@@ -297,4 +297,4 @@ if __name__ == '__main__':
     report_generator.add_text(f'Correct: {correct_cnt}')
     report_generator.add_text(f'Total: {total_cnt}')
     report_generator.add_text(f'Accuracy: {format(round(accuracy, 3) * 100, ".1f")}%')
-    report_generator.generate_report('TestReport')
+    report_generator.generate_report(os.path.join(OUT_DIR, 'TestReport'))
