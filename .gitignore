@@ -9,10 +9,10 @@ env
 venv
 # Pycharm
 .idea
-out
 
-# exclude everything
+out/*
 ckpt/*
 
 # exception to the rule
 !ckpt/.gitkeep
+!out/.gitkeep
