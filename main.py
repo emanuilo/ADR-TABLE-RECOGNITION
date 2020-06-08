@@ -164,7 +164,7 @@ class NumberDetector:
                 if temp_y2 - temp_y1 > ref_difference * MAGIC_NUMBER:
                     return i + 1
         except IndexError:
-            print('Not enough data.')
+            # print('Not enough data.')
             return 0
 
 
@@ -182,7 +182,7 @@ class NumberToSubstanceConv:
             substance_name = self.substances_dict[substance_id]
             return substance_name
         except KeyError:
-            print("Key Error!")
+            # print("Key Error!")
             return ''
 
     def get_danger_name(self, danger_id):
@@ -190,7 +190,7 @@ class NumberToSubstanceConv:
             danger_name = self.dangers_dict[danger_id]
             return danger_name
         except KeyError:
-            print("Key Error!")
+            # print("Key Error!")
             return ''
 
 
@@ -266,6 +266,7 @@ if __name__ == '__main__':
 
         if image_path.endswith('.jpg'):
             report_generator.add_heading(image_path)
+            print(image_path)
 
             base_name = os.path.splitext(image_path)[0]
             img = cv2.imread(os.path.join(args['image_dir'], image_path))
