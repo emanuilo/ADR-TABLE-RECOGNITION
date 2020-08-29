@@ -45,12 +45,19 @@ Python 3.7
 ```
 
 ## Usage
-Basic test
+Basic prediction. Results are generated in out/results.json
 ```
     python main.py
 ```
-Custom test images directory and ground truth directory
+Prediction with custom images directory and ground truth directory. Results are generated in out/results.json
 ```
-    python main.py --ground-truth-dir <ground_truth_dir> --image-dir <test_images_dir>
+    python main.py --image-dir <test_images_dir>
 ```
-TestReport.pdf file will be generated in the out/ directory
+Validation test with ground truth data. PDF test summary is generated in out/TestReport.pdf
+```
+    python main.py --validation-test 
+```
+Validation test with custom directories. PDF test summary is generated in out/TestReport.pdf
+```
+    python main.py --validation-test --ground-truth-dir <ground_truth_dir> --image-dir <test_images_dir>
+```

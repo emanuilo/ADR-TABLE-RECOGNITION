@@ -2,6 +2,7 @@ import os
 import re
 import cv2
 import json
+import logging
 import argparse
 import pytesseract
 from darkflow.net.build import TFNet
@@ -14,6 +15,9 @@ ap.add_argument("-i", "--image", type=str,
                 help="path to input image")
 ap.add_argument("-e", "--convert-xls-to-json", type=str,
                 help="Convert excel file to json")
+ap.add_argument("-vt", "--validation-test", action='store_true',
+                help="Command for a validation test. It generates PDF report. "
+                     "It it is compatible with --image-dir and --ground-truth-dir.")
 ap.add_argument("-id", "--image-dir", type=str, default='test_images',
                 help="path to input directory")
 ap.add_argument("-gtd", "--ground-truth-dir", type=str, default='test_images/ground_truth',
@@ -24,6 +28,7 @@ args = vars(ap.parse_args())
 
 OUT_DIR = 'out/'
 TEMP_IMAGE_DIR = os.path.join(OUT_DIR, 'temp')
+INFERENCE_RESULTS_FILE_NAME = 'results.json'
 
 
 class ImagePreprocessor:
@@ -257,45 +262,76 @@ if __name__ == '__main__':
     adr_table_detector = AdrTableDetector(args['threshold'])
     number_detector = NumberDetector(args['threshold'])
     converter = NumberToSubstanceConv('substances_files/Materija.json', 'substances_files/IdentifikacijaOpasnosti.json')
-    report_generator = ReportGenerator()
 
-    correct_cnt = 0
-    total_cnt = 0
+    if args['validation_test']:
+        report_generator = ReportGenerator()
+        correct_cnt = 0
+        total_cnt = 0
 
-    for image_path in os.listdir(args['image_dir']):
+        for image_path in os.listdir(args['image_dir']):
 
-        if image_path.endswith('.jpg'):
-            report_generator.add_heading(image_path)
-            print(image_path)
+            if image_path.endswith('.jpg'):
+                report_generator.add_heading(image_path)
+                print(image_path)
 
-            base_name = os.path.splitext(image_path)[0]
-            img = cv2.imread(os.path.join(args['image_dir'], image_path))
+                base_name = os.path.splitext(image_path)[0]
+                img = cv2.imread(os.path.join(args['image_dir'], image_path))
 
-            adr_table = adr_table_detector.detect_adr_table(img)
-            report_generator.add_image(adr_table)
-            adr_table = cv2.medianBlur(adr_table, 1)    # todo delete or move
+                adr_table = adr_table_detector.detect_adr_table(img)
+                report_generator.add_image(adr_table)
+                adr_table = cv2.medianBlur(adr_table, 1)    # todo delete or move
 
-            first_row_images, second_row_images = number_detector.detect_numbers(
-                adr_table,
-                ImageUtil.no_extension_file_name(image_path))
-            report_generator.add_number_images(first_row_images + second_row_images)
+                first_row_images, second_row_images = number_detector.detect_numbers(
+                    adr_table,
+                    ImageUtil.no_extension_file_name(image_path))
+                report_generator.add_number_images(first_row_images + second_row_images)
 
-            first_row, second_row = number_detector.get_rows(first_row_images, second_row_images)
-            report_generator.add_text(f'First row: {first_row}')
-            report_generator.add_text(f'Second row: {second_row}')
+                first_row, second_row = number_detector.get_rows(first_row_images, second_row_images)
+                report_generator.add_text(f'First row: {first_row}')
+                report_generator.add_text(f'Second row: {second_row}')
 
-            report_generator.add_text(f'Danger: {converter.get_danger_name(first_row)}')
-            report_generator.add_text(f'Substance: {converter.get_substance_name(second_row)}')
+                report_generator.add_text(f'Danger: {converter.get_danger_name(first_row)}')
+                report_generator.add_text(f'Substance: {converter.get_substance_name(second_row)}')
 
-            with open(f'{args["ground_truth_dir"]}/{base_name}.json') as f:
-                ground_truth = json.load(f)
-            if first_row == ground_truth['first_row'] and second_row == ground_truth['second_row']:
-                correct_cnt += 1
-            total_cnt += 1
+                with open(f'{args["ground_truth_dir"]}/{base_name}.json') as f:
+                    ground_truth = json.load(f)
+                if first_row == ground_truth['first_row'] and second_row == ground_truth['second_row']:
+                    correct_cnt += 1
+                total_cnt += 1
 
-    accuracy = correct_cnt / total_cnt
-    report_generator.add_heading('Test results: ')
-    report_generator.add_text(f'Correct: {correct_cnt}')
-    report_generator.add_text(f'Total: {total_cnt}')
-    report_generator.add_text(f'Accuracy: {format(round(accuracy, 3) * 100, ".1f")}%')
-    report_generator.generate_report(os.path.join(OUT_DIR, 'TestReport'))
+        accuracy = correct_cnt / total_cnt
+        report_generator.add_heading('Test results: ')
+        report_generator.add_text(f'Correct: {correct_cnt}')
+        report_generator.add_text(f'Total: {total_cnt}')
+        report_generator.add_text(f'Accuracy: {format(round(accuracy, 3) * 100, ".1f")}%')
+        report_generator.generate_report(os.path.join(OUT_DIR, 'TestReport'))
+
+    else:
+        logging.info("entered else")
+        results_dict = {'results': []}
+
+        for image_path in os.listdir(args['image_dir']):
+
+            if image_path.endswith('.jpg'):
+                print(image_path)
+
+                base_name = os.path.splitext(image_path)[0]
+                img = cv2.imread(os.path.join(args['image_dir'], image_path))
+
+                adr_table = adr_table_detector.detect_adr_table(img)
+                adr_table = cv2.medianBlur(adr_table, 1)  # todo delete or move
+
+                first_row_images, second_row_images = number_detector.detect_numbers(
+                    adr_table,
+                    ImageUtil.no_extension_file_name(image_path))
+
+                first_row, second_row = number_detector.get_rows(first_row_images, second_row_images)
+
+                results_dict['results'].append({
+                    'image_name': image_path,
+                    'danger_name': converter.get_danger_name(first_row),
+                    'substance_name': converter.get_substance_name(second_row)
+                })
+
+        with open(os.path.join(OUT_DIR, INFERENCE_RESULTS_FILE_NAME), "w") as f:
+            json.dump(results_dict, f)
